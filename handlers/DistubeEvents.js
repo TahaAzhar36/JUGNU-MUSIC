@@ -9,7 +9,8 @@ const InitAutoResume = require("./InitAutoResume");
  */
 module.exports = async (client) => {
   client.on(Events.ClientReady, async () => {
-    setTimeout(async () => await AutoresumeHandler(client), 2 * client.ws.ping);
+    const delay = client.ws.ping > 0 ? 2 * client.ws.ping : 1000;
+    setTimeout(async () => await AutoresumeHandler(client), delay);
   });
 
   // events
@@ -46,18 +47,19 @@ module.exports = async (client) => {
             ])
             .setFooter(client.getFooter(song.user)),
         ],
-  components: client.buttons(false, queue),
+        components: client.buttons(false, queue),
       })
       .then((msg) => {
         client.temp.set(queue.textChannel.guildId, msg.id);
-      });
+      })
+      .catch((e) => null);
   });
 
   client.distube.on("addSong", async (queue, song) => {
     let data = await client.music.get(`${queue.textChannel.guildId}.music`);
     if (data) {
-  await client.updatequeue(queue);
-  await client.updateplayer(queue);
+      await client.updatequeue(queue);
+      await client.updateplayer(queue);
       if (data.channel === queue.textChannel.id) return;
     }
     queue.textChannel
@@ -96,14 +98,15 @@ module.exports = async (client) => {
         setTimeout(() => {
           msg.delete().catch((e) => null);
         }, 5000);
-      });
+      })
+      .catch((e) => null);
   });
 
   client.distube.on("addList", async (queue, playlist) => {
     let data = await client.music.get(`${queue.textChannel.guildId}.music`);
     if (data) {
-  await client.updatequeue(queue);
-  await client.updateplayer(queue);
+      await client.updatequeue(queue);
+      await client.updateplayer(queue);
       if (data.channel === queue.textChannel.id) return;
     }
 
@@ -143,7 +146,8 @@ module.exports = async (client) => {
         setTimeout(() => {
           msg.delete().catch((e) => null);
         }, 5000);
-      });
+      })
+      .catch((e) => null);
   });
 
   client.distube.on("disconnect", async (queue) => {
@@ -183,36 +187,43 @@ module.exports = async (client) => {
   });
 
   client.distube.on("error", async (error, queue, song) => {
-    queue.textChannel
-      .send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(client.config.embed.color)
-            .setTitle(`Found a Error...`)
-            .setDescription(String(error).substring(0, 3000)),
-        ],
-      })
-      .then((msg) => {
-        setTimeout(() => {
-          msg.delete().catch((e) => null);
-        }, 5000);
-      });
+    console.error(`[DisTube Error]:`, error);
+    if (queue?.textChannel) {
+      queue.textChannel
+        .send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(client.config.embed.color)
+              .setTitle(`Found a Error...`)
+              .setDescription(String(error).substring(0, 3000)),
+          ],
+        })
+        .then((msg) => {
+          setTimeout(() => {
+            msg.delete().catch((e) => null);
+          }, 5000);
+        })
+        .catch((e) => {});
+    }
   });
 
   client.distube.on("noRelated", async (queue) => {
-    queue.textChannel
-      .send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(client.config.embed.color)
-            .setTitle(`No Related Song Found for \`${queue?.songs[0].name}\``),
-        ],
-      })
-      .then((msg) => {
-        setTimeout(() => {
-          msg.delete().catch((e) => null);
-        }, 5000);
-      });
+    if (queue?.textChannel) {
+      queue.textChannel
+        .send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(client.config.embed.color)
+              .setTitle(`No Related Song Found for \`${queue?.songs[0]?.name}\``),
+          ],
+        })
+        .then((msg) => {
+          setTimeout(() => {
+            msg.delete().catch((e) => null);
+          }, 5000);
+        })
+        .catch((e) => {});
+    }
   });
 
   client.distube.on("finishSong", async (queue, song) => {
@@ -237,19 +248,22 @@ module.exports = async (client) => {
       // ignore leave errors
     }
 
-    queue.textChannel
-      .send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(client.config.embed.color)
-            .setDescription(`Queue has ended! No more music to play`),
-        ],
-      })
-      .then((msg) => {
-        setTimeout(() => {
-          msg.delete().catch((e) => null);
-        }, 5000);
-      });
+    if (queue.textChannel) {
+      queue.textChannel
+        .send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(client.config.embed.color)
+              .setDescription(`Queue has ended! No more music to play`),
+          ],
+        })
+        .then((msg) => {
+          setTimeout(() => {
+            msg.delete().catch((e) => null);
+          }, 5000);
+        })
+        .catch((e) => {});
+    }
   });
 
   client.distube.on("initQueue", async (queue) => {

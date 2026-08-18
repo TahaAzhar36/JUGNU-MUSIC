@@ -27,15 +27,40 @@ High‑quality Discord music bot powered by DisTube and discord.js v14 — YouTu
 
 1) Install latest LTS [Node.js](https://nodejs.org/) (>= 18.17) and [Python](https://www.python.org/downloads/).
 
-2) Clone or download the repository.
+2) **Install FFmpeg** (Required for stable audio streaming across all platforms):
 
-3) Install dependencies:
+- **Ubuntu / Debian / Pop!_OS / Mint**:
+  ```bash
+  sudo apt update && sudo apt install -y ffmpeg
+  ```
+- **Arch Linux / Manjaro**:
+  ```bash
+  sudo pacman -S ffmpeg
+  ```
+- **Fedora / RHEL / CentOS**:
+  ```bash
+  sudo dnf install ffmpeg
+  ```
+- **macOS** (via [Homebrew](https://brew.sh/)):
+  ```bash
+  brew install ffmpeg
+  ```
+- **Windows** (via [Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) or [Chocolatey](https://chocolatey.org/)):
+  ```powershell
+  winget install Gyan.FFmpeg
+  # or
+  choco install ffmpeg
+  ```
+
+3) Clone or download the repository.
+
+4) Install dependencies:
 
 ```powershell
 npm install
 ```
 
-4) Configure the bot in `settings/config.js` and `.env`.
+5) Configure the bot in `settings/config.js` and `.env`.
 
 ### _Modify - config.js_
 
@@ -65,28 +90,21 @@ GUILD_ID=
 # Set to true to register commands globally (may take up to 1 hour to propagate)
 SLASH_GLOBAL=false
 
-# Web server
+# Web server port (optional)
 PORT=3000
-
-# Reduce noisy update checks from ytsr/ytdl
-YTSR_NO_UPDATE=true
-YTDL_NO_UPDATE=true
-
-# Voice diagnostics (optional; set true to print a dependency report on startup)
-VOICE_DEBUG_REPORT=false
 ```
 
 Notes:
 - If you want global slash commands, set `SLASH_GLOBAL=true`. Otherwise, keep `GUILD_ID` set (you can provide multiple IDs separated by commas) for instant per‑guild updates.
 - `MONGO_URL` enables MongoDB storage via JoshDB’s Mongo provider; if omitted, JSON storage is used.
 
-5) Optional native optimizations (Windows/macOS/Linux):
+6) Optional native optimizations (Windows/macOS/Linux):
 
 ```powershell
 npm install @discordjs/opus zlib-sync@latest erlpack@latest
 ```
 
-6) Start the bot:
+7) Start the bot:
 
 ```powershell
 npm start

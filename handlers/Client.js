@@ -11,8 +11,7 @@ const Distube = require("distube").default;
 const { SpotifyPlugin } = require("@distube/spotify");
 const { SoundCloudPlugin } = require("@distube/soundcloud");
 const { filters, options } = require("../settings/config");
-const { YtDlpPlugin } = require("@distube/yt-dlp");
-const { YouTubePlugin } = require("@distube/youtube");
+const { CustomYtDlpPlugin } = require("./YtDlpPlugin");
 
 class JUGNU extends Client {
   constructor() {
@@ -60,41 +59,60 @@ class JUGNU extends Client {
       customFilters: filters, // Use custom filters if needed
       // Plugins configuration
       plugins: [
-        new YouTubePlugin(),
-        // Spotify Plugin with optimizations
         new SpotifyPlugin(),
-        new SoundCloudPlugin(), // SoundCloud Plugin remains the same
-        // YouTube DL Plugin with optimizations
-        new YtDlpPlugin({
-          update: false, // Disable runtime updater for faster startup
-          requestOptions: {
-            // Configure request options for faster downloading
-            maxRedirects: 5, // Increase maximum redirects
-            timeout: 10000, // Set timeout for requests to avoid long waits
-            headers: process.env.YOUTUBE_COOKIE
-              ? { Cookie: process.env.YOUTUBE_COOKIE }
-              : undefined,
-          },
-        }),
+        new SoundCloudPlugin(),
+        new CustomYtDlpPlugin(),
       ],
-      ffmpeg: {
-        path: (() => {
-          if (process.env.FFMPEG_PATH && process.env.FFMPEG_PATH.trim()) {
-            return process.env.FFMPEG_PATH;
-          }
-          try {
-            return require("ffmpeg-static");
-          } catch (_) {
-            try {
-              const inst = require("@ffmpeg-installer/ffmpeg");
-              return inst && inst.path ? inst.path : undefined;
-            } catch (_) {
-              return undefined;
-            }
-          }
-        })(),
-      },
     });
+
+    const ytSearch = require("yt-search");
+    this.resolveQuery = async (query) => {
+      if (typeof query !== "string") return query;
+      const trimmed = query.trim();
+      if (/^(https?:\/\/)/i.test(trimmed)) return trimmed;
+      const clean = trimmed.replace(/^ytsearch[0-9]*:/i, "").trim();
+      try {
+        const res = await ytSearch(clean);
+        if (res && res.videos && res.videos.length > 0) {
+          return res.videos[0].url;
+        }
+      } catch (e) {
+        console.error("[yt-search] Query resolution failed:", e);
+      }
+      return trimmed;
+    };
+
+    const originalPlay = this.distube.play.bind(this.distube);
+    this.distube.play = async (voiceChannel, song, options = {}) => {
+      let resolvedSong = song;
+      if (typeof song === "string") {
+        resolvedSong = await this.resolveQuery(song);
+      }
+      return originalPlay(voiceChannel, resolvedSong, options);
+    };
+
+    this.distube.search = async (query, options = {}) => {
+      const clean = (typeof query === "string" ? query : "")
+        .trim()
+        .replace(/^ytsearch[0-9]*:/i, "")
+        .trim();
+      try {
+        const res = await ytSearch(clean);
+        if (res && res.videos && res.videos.length > 0) {
+          return res.videos.slice(0, options.limit || 10).map((v) => ({
+            name: v.title,
+            url: v.url,
+            formattedDuration: v.timestamp,
+            thumbnail: v.thumbnail,
+            uploader: { name: v.author?.name },
+            views: v.views,
+          }));
+        }
+      } catch (e) {
+        console.error("[yt-search] Search failed:", e);
+      }
+      return [];
+    };
   }
 
   start(token) {

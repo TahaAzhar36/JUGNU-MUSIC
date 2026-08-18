@@ -13,8 +13,8 @@ const embedSettings = {
 };
 
 const emojiSettings = {
-  ERROR: "<a:wrong:1158264214960488468>",
-  SUCCESS: "<a:check:1158261895111913554>",
+  ERROR: "❌",
+  SUCCESS: "✅",
   disabled: "🔴",
   enabled: "🟢",
   cleared: "🧹",
