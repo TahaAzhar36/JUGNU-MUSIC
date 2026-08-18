@@ -2,6 +2,7 @@ const { PlayableExtractorPlugin, Playlist, Song, DisTubeError } = require("distu
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const { metadataCache, streamUrlCache, singleFlight } = require("./Cache");
 
 function resolveBinaryPath() {
   const localBinary = path.join(
@@ -17,6 +18,56 @@ function resolveBinaryPath() {
     return localBinary;
   }
   return "yt-dlp";
+}
+
+function fetchFastStreamUrl(url) {
+  const cached = streamUrlCache.get(url);
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+
+  return singleFlight.do(`stream:${url}`, () => {
+    const binary = resolveBinaryPath();
+    const rootCookies = path.join(__dirname, "..", "cookies.txt");
+    const cookieFlags = fs.existsSync(rootCookies) ? ["--cookies", rootCookies] : [];
+
+    const flags = [
+      "-g",
+      "--no-warnings",
+      "--no-check-certificates",
+      "-f",
+      "ba/ba*",
+      "--extractor-args",
+      "youtube:player_client=android;player_skip=webpage,configs",
+      ...cookieFlags,
+      url,
+    ];
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(binary, flags);
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout.on("data", (chunk) => {
+        stdout += chunk;
+      });
+      proc.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+
+      proc.on("close", (code) => {
+        const streamUrl = stdout.trim().split("\n")[0]?.trim();
+        if (code === 0 && streamUrl && streamUrl.startsWith("http")) {
+          streamUrlCache.set(url, streamUrl);
+          resolve(streamUrl);
+        } else {
+          reject(new Error(stderr || stdout || `yt-dlp exited with code ${code}`));
+        }
+      });
+
+      proc.on("error", reject);
+    });
+  });
 }
 
 function runYtDlpJson(url, extraFlags = []) {
@@ -74,17 +125,17 @@ class CustomYtDlpSong extends Song {
         plugin,
         source: info.extractor || "youtube",
         playFromSource: true,
-        id: info.id,
+        id: info.id || info.videoId,
         name: info.title || info.fulltitle,
-        url: info.webpage_url || info.original_url || `https://youtu.be/${info.id}`,
-        isLive: Boolean(info.is_live),
-        thumbnail: info.thumbnail || info.thumbnails?.[0]?.url,
-        duration: info.is_live ? 0 : info.duration || 0,
+        url: info.webpage_url || info.original_url || info.url || `https://youtu.be/${info.id || info.videoId}`,
+        isLive: Boolean(info.is_live || info.live),
+        thumbnail: info.thumbnail || info.thumbnails?.[0]?.url || (info.image ? info.image : undefined),
+        duration: info.is_live ? 0 : info.duration || info.seconds || 0,
         uploader: {
-          name: info.uploader,
-          url: info.uploader_url,
+          name: info.uploader || info.author?.name || "YouTube",
+          url: info.uploader_url || info.author?.url || "",
         },
-        views: info.view_count || 0,
+        views: info.view_count || info.views || 0,
         likes: info.like_count || 0,
         dislikes: info.dislike_count || 0,
         reposts: info.repost_count || 0,
@@ -114,8 +165,12 @@ class CustomYtDlpPlugin extends PlayableExtractorPlugin {
   }
 
   async resolve(url, options = {}) {
-    const extraFlags = [...this._getCookieFlags()];
+    const cachedInfo = metadataCache.get(url);
+    if (cachedInfo) {
+      return new CustomYtDlpSong(this, cachedInfo, options);
+    }
 
+    const extraFlags = [...this._getCookieFlags()];
     const info = await runYtDlpJson(url, extraFlags).catch((err) => {
       console.error(`[YtDlpPlugin Resolve Error]:`, err.message || err);
       throw new DisTubeError("YTDLP_ERROR", `${err.message || err}`);
@@ -148,21 +203,12 @@ class CustomYtDlpPlugin extends PlayableExtractorPlugin {
         "Cannot get stream url from invalid song."
       );
     }
-    const extraFlags = ["-f", "ba/ba*", ...this._getCookieFlags()];
-
-    const info = await runYtDlpJson(song.url, extraFlags).catch((err) => {
+    const streamUrl = await fetchFastStreamUrl(song.url).catch((err) => {
       console.error(`[YtDlpPlugin Stream Error]:`, err.message || err);
       throw new DisTubeError("YTDLP_ERROR", `${err.message || err}`);
     });
 
-    if (Array.isArray(info.entries)) {
-      throw new DisTubeError(
-        "YTDLP_ERROR",
-        "Cannot get stream URL of an entire playlist"
-      );
-    }
-
-    return info.url;
+    return streamUrl;
   }
 
   getRelatedSongs() {
@@ -170,4 +216,8 @@ class CustomYtDlpPlugin extends PlayableExtractorPlugin {
   }
 }
 
-module.exports = { CustomYtDlpPlugin, CustomYtDlpSong };
+module.exports = {
+  CustomYtDlpPlugin,
+  CustomYtDlpSong,
+  fetchFastStreamUrl,
+};

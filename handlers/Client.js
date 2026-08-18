@@ -11,7 +11,8 @@ const Distube = require("distube").default;
 const { SpotifyPlugin } = require("@distube/spotify");
 const { SoundCloudPlugin } = require("@distube/soundcloud");
 const { filters, options } = require("../settings/config");
-const { CustomYtDlpPlugin } = require("./YtDlpPlugin");
+const { CustomYtDlpPlugin, fetchFastStreamUrl } = require("./YtDlpPlugin");
+const { searchCache, metadataCache, singleFlight } = require("./Cache");
 
 class JUGNU extends Client {
   constructor() {
@@ -66,20 +67,82 @@ class JUGNU extends Client {
     });
 
     const ytSearch = require("yt-search");
+
+    const fastSearch = async (query) => {
+      try {
+        const res = await fetch("https://www.youtube.com/youtubei/v1/search?prettyPrint=false", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            context: {
+              client: { clientName: "WEB", clientVersion: "2.20240401.01.00", hl: "en", gl: "US" },
+            },
+            query,
+          }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const sections = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+        for (const s of sections) {
+          const items = s.itemSectionRenderer?.contents || [];
+          for (const item of items) {
+            const v = item.videoRenderer;
+            if (v && v.videoId) {
+              const title = v.title?.runs?.[0]?.text || v.title?.simpleText;
+              const durStr = v.lengthText?.runs?.[0]?.text || v.lengthText?.simpleText || "0:00";
+              return {
+                title,
+                url: `https://www.youtube.com/watch?v=${v.videoId}`,
+                videoId: v.videoId,
+                id: v.videoId,
+                thumbnail: v.thumbnail?.thumbnails?.[0]?.url,
+                author: { name: v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || "YouTube" },
+                duration: durStr,
+                timestamp: durStr,
+                views: v.viewCountText?.simpleText || 0,
+              };
+            }
+          }
+        }
+      } catch (_) {}
+      return null;
+    };
+
     this.resolveQuery = async (query) => {
       if (typeof query !== "string") return query;
       const trimmed = query.trim();
-      if (/^(https?:\/\/)/i.test(trimmed)) return trimmed;
-      const clean = trimmed.replace(/^ytsearch[0-9]*:/i, "").trim();
-      try {
-        const res = await ytSearch(clean);
-        if (res && res.videos && res.videos.length > 0) {
-          return res.videos[0].url;
-        }
-      } catch (e) {
-        console.error("[yt-search] Query resolution failed:", e);
+      if (/^(https?:\/\/)/i.test(trimmed)) {
+        fetchFastStreamUrl(trimmed).catch(() => null);
+        return trimmed;
       }
-      return trimmed;
+      const clean = trimmed.replace(/^ytsearch[0-9]*:/i, "").trim();
+      const cacheKey = clean.toLowerCase();
+      const cached = searchCache.get(cacheKey);
+      if (cached) {
+        fetchFastStreamUrl(cached.url).catch(() => null);
+        return cached.url;
+      }
+
+      return singleFlight.do(`search:${cacheKey}`, async () => {
+        try {
+          let top = await fastSearch(clean);
+          if (!top) {
+            const res = await ytSearch(clean);
+            if (res && res.videos && res.videos.length > 0) {
+              top = res.videos[0];
+            }
+          }
+          if (top) {
+            metadataCache.set(top.url, top);
+            searchCache.set(cacheKey, top);
+            fetchFastStreamUrl(top.url).catch(() => null);
+            return top.url;
+          }
+        } catch (e) {
+          console.error("[Search] Query resolution failed:", e);
+        }
+        return trimmed;
+      });
     };
 
     const originalPlay = this.distube.play.bind(this.distube);
