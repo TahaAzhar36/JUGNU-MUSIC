@@ -1,11 +1,12 @@
 {
   "name": "jugnu-music",
   "version": "1.0.0",
-  "description": "High-quality Discord music bot powered by DisTube and discord.js v14 — YouTube, Spotify, SoundCloud, lyrics, filters, autoplay, 24/7, and more.",
+  "description": "Ultra-fast, high-performance Discord music bot powered by DisTube & discord.js v14 — YouTube, Spotify, SoundCloud, 24/7, Autoresume, custom playlists, and LRU cache.",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "allowScripts": {
     "@discordjs/opus": true,
@@ -21,11 +22,13 @@
     "discord",
     "discord-bot",
     "discord-music-bot",
-    "music",
+    "music-bot",
     "distube",
+    "distube-v5",
     "discord.js",
     "discordjs-v14",
     "slash-commands",
+    "yt-dlp",
     "youtube",
     "spotify",
     "soundcloud",
@@ -38,6 +41,8 @@
     "auto-resume",
     "dj",
     "ffmpeg",
+    "lru-cache",
+    "high-performance",
     "nodejs",
     "self-hosted",
     "open-source"
