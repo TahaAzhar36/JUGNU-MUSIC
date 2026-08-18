@@ -44,11 +44,22 @@ module.exports = {
     try {
       await client.distube.voices.join(channel);
     } catch {}
-    client.distube.play(channel, song, {
-      member: interaction.member,
-      textChannel: interaction.channel,
-      ...(hqMode ? { volume: 100 } : {}),
-    });
+
+    try {
+      await client.distube.play(channel, song, {
+        member: interaction.member,
+        textChannel: interaction.channel,
+        ...(hqMode ? { volume: 100 } : {}),
+      });
+    } catch (err) {
+      return interaction
+        .followUp({
+          content: `${client.config.emoji.ERROR} Failed to play: \`${err.message || err}\``,
+          ephemeral: true,
+        })
+        .catch(() => {});
+    }
+
     interaction
       .followUp({
         content: `Searching \`${song}\``,

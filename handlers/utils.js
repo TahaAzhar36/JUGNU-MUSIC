@@ -129,7 +129,7 @@ module.exports = async (client) => {
 
     let playembed =
       channel.messages.cache.get(ID) ||
-      (await channel.messages.fetch(ID).catch(console.error));
+      (await channel.messages.fetch(ID).catch(() => null));
     if (!playembed) return;
 
     if (client.config.options.nowplayingMsg) {
@@ -147,7 +147,7 @@ module.exports = async (client) => {
             ],
             components: client.buttons(true, null),
           })
-          .catch(console.error);
+          .catch(() => {});
       }
     }
   };

@@ -39,12 +39,20 @@ module.exports = {
       try {
         await client.distube.voices.join(channel);
       } catch {}
-      await client.distube.play(channel, song, {
-        member: message.member,
-        textChannel: message.channel,
-        message: message,
-        ...(hqMode ? { volume: 100 } : {}),
-      });
+
+      try {
+        await client.distube.play(channel, song, {
+          member: message.member,
+          textChannel: message.channel,
+          message: message,
+          ...(hqMode ? { volume: 100 } : {}),
+        });
+      } catch (err) {
+        client.embed(
+          message,
+          `${client.config.emoji.ERROR} Failed to play: \`${err.message || err}\``
+        );
+      }
 
       await message.delete().catch((err) => {});
     }
